@@ -563,6 +563,27 @@
     background: rgba(229,115,115,0.92);
     color: white;
   }
+
+  /* TTS BUTTON */
+  .tts-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: 'Lato', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 0.4rem;
+    color: var(--amber);
+  }
+  .tts-btn:hover { opacity: 1; }
+  .tts-btn.speaking { opacity: 1; }
 </style>
 </head>
 <body>
@@ -704,6 +725,75 @@ let config = {
 // ═══════════════════════════════════════
 // INICIALIZAÇÃO
 // ═══════════════════════════════════════
+
+// TTS
+let currentUtterance = null;
+
+function toggleSpeak(btn) {
+  const text = btn.dataset.text;
+  if (!text) return;
+
+  if (btn.classList.contains('speaking')) {
+    window.speechSynthesis.cancel();
+    btn.classList.remove('speaking');
+    btn.innerHTML = '🔊 Ler em voz alta';
+    currentUtterance = null;
+    return;
+  }
+
+  window.speechSynthesis.cancel();
+  document.querySelectorAll('.tts-btn.speaking').forEach(b => {
+    b.classList.remove('speaking');
+    b.innerHTML = '🔊 Ler em voz alta';
+  });
+
+  const clean = text
+    .replace(/\*\*/g, '').replace(/\*/g, '')
+    .replace(/^#+\s/gm, '').trim();
+
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.lang = 'pt-BR';
+  utterance.rate = 0.85;
+  utterance.pitch = 0.85;
+
+  utterance.onstart = () => {
+    btn.classList.add('speaking');
+    btn.innerHTML = '⏹ Parar';
+  };
+  utterance.onend = () => {
+    btn.classList.remove('speaking');
+    btn.innerHTML = '🔊 Ler em voz alta';
+    currentUtterance = null;
+  };
+  utterance.onerror = () => {
+    btn.classList.remove('speaking');
+    btn.innerHTML = '🔊 Ler em voz alta';
+    currentUtterance = null;
+  };
+
+  currentUtterance = utterance;
+
+  function pickVoiceAndSpeak() {
+    const voices = window.speechSynthesis.getVoices();
+    const maleVoice =
+      voices.find(v => v.lang === 'pt-BR' && /daniel|ricardo|male/i.test(v.name)) ||
+      voices.find(v => v.lang === 'pt-BR') ||
+      voices.find(v => v.lang.startsWith('pt')) ||
+      voices.find(v => /male/i.test(v.name));
+    if (maleVoice) utterance.voice = maleVoice;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  if (window.speechSynthesis.getVoices().length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.onvoiceschanged = null;
+      pickVoiceAndSpeak();
+    };
+  } else {
+    pickVoiceAndSpeak();
+  }
+}
+
 function init() {
   const saved = localStorage.getItem('elias_config');
   if (saved) {
@@ -789,12 +879,20 @@ function renderMessage(role, content, animate = true) {
   const avatar = role === 'elias' ? '⚕' : '◈';
   const name = role === 'elias' ? 'DR. MONTENEGRO' : 'SUPERVISIONANDO';
 
+  const isElias = role === 'elias';
+  const ttsBtn = isElias
+    ? `<button class="tts-btn" onclick="toggleSpeak(this)" title="Ler em Voz Alta">🔊 Ler em voz alta</button>`
+    : '';
+
   div.innerHTML = `
     <div class="msg-avatar">${avatar}</div>
     <div class="msg-bubble">
       <span class="msg-name">${name}</span>
       ${formatMessage(content)}
+      ${ttsBtn}
     </div>`;
+
+  if (isElias) div.querySelector('.tts-btn').dataset.text = content;
 
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
